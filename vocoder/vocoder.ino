@@ -36,7 +36,8 @@
 
 // GUItool: begin automatically generated code
 AudioInputI2S            i2s1;           //xy=171,527
-AudioInputUSB            usb1;           //xy=171,559
+// AudioInputUSB            usb1;           //xy=171,559
+AudioPlaySdWav           playSdWav1;     //xy=118,75
 AudioMixer4              mixer1;         //xy=315,510
 AudioMixer4              mixer2;         //xy=315,572
 AudioFilterStateVariable filter39;       //xy=481,645
@@ -150,11 +151,13 @@ AudioMixer4              mixer8;         //xy=1695,791
 AudioMixer4              mixer11;        //xy=1803,1050
 AudioAnalyzePeak         peak22;         //xy=1961,991
 AudioOutputI2S           i2s2;           //xy=1965,1033
-AudioOutputUSB           usb2;           //xy=1965,1064
+// AudioOutputUSB           usb2;           //xy=1965,1064
 AudioConnection          patchCord1(i2s1, 0, mixer1, 0);
 AudioConnection          patchCord2(i2s1, 1, mixer2, 0);
-AudioConnection          patchCord3(usb1, 0, mixer1, 1);
-AudioConnection          patchCord4(usb1, 1, mixer2, 1);
+// AudioConnection          patchCord3(usb1, 0, mixer1, 1);
+// AudioConnection          patchCord4(usb1, 1, mixer2, 1);
+AudioConnection          patchCord3(playSdWav1, 0, mixer1, 1);
+AudioConnection          patchCord4(playSdWav1, 1, mixer2, 1);
 AudioConnection          patchCord5(mixer1, 0, filter1, 0);
 AudioConnection          patchCord6(mixer1, 0, filter3, 0);
 AudioConnection          patchCord7(mixer1, 0, filter5, 0);
@@ -285,10 +288,12 @@ AudioConnection          patchCord131(mixer7, 0, mixer10, 0);
 AudioConnection          patchCord132(mixer8, 0, mixer10, 1);
 AudioConnection          patchCord133(mixer11, 0, i2s2, 0);
 AudioConnection          patchCord134(mixer11, 0, i2s2, 1);
-AudioConnection          patchCord135(mixer11, 0, usb2, 0);
-AudioConnection          patchCord136(mixer11, 0, usb2, 1);
+// AudioConnection          patchCord135(mixer11, 0, usb2, 0);
+// AudioConnection          patchCord136(mixer11, 0, usb2, 1);
 AudioConnection          patchCord137(mixer11, peak22);
 // GUItool: end automatically generated code
+
+AudioControlSGTL5000     sgtl5000_1;     //xy=295,185
 
 elapsedMillis serialtimer;
 const float res = 5;                                            // this is used as resonance value of all state variable filters
@@ -345,17 +350,27 @@ float peak1val, peak2val, peak3val, peak4val, peak5val, peak6val,
   peak13val, peak14val, peak15val, peak16val, peak17val, peak18val,
   peak19val;
 
+const int myInput = AUDIO_INPUT_MIC;
+#define SDCARD_CS_PIN    10
+#define SDCARD_MOSI_PIN  11
+#define SDCARD_SCK_PIN   12
+
 void setup() {
   AudioMemory(64);                                              // allocate some memory for audio library
   Serial.begin(115200);                                         // initialize serial communication
   noise1.amplitude(0.7);                                        // controls sibilance (hiss syllables)
-  mixer1.gain(0, 0);                                            // I2S left input level
-  mixer1.gain(1, 1);                                            // USB left input level
-  mixer2.gain(0, 0);                                            // I2S right input level
-  mixer2.gain(1, 1);                                            // USB right input level
+  mixer1.gain(0, 1);                                            // I2S left input level
+  mixer1.gain(1, 0.5);                                            // playSdWav left input level
+  mixer2.gain(0, 1);                                            // I2S right input level
+  mixer2.gain(1, 0.5);                                            // playSdWav right input level
   mixer11.gain(0, 1);                                           // vocoder output 1 level (low-mid freq)
   mixer11.gain(1, 1);                                           // vocoder output 2 level (high freq)
   mixer11.gain(2, 0);                                           // instrument to output mix level
+
+  sgtl5000_1.enable();
+  sgtl5000_1.inputSelect(myInput);
+  sgtl5000_1.micGain(42);
+  sgtl5000_1.volume(0.6);
   
   filter1.resonance(res);                                       // set the resonance of the filters
   filter2.resonance(res);
@@ -537,9 +552,23 @@ void setup() {
   
   AudioProcessorUsageMaxReset();                                // and reset these things
   AudioMemoryUsageMaxReset();
+  SPI.setMOSI(SDCARD_MOSI_PIN);
+  SPI.setSCK(SDCARD_SCK_PIN);
+  if (!(SD.begin(SDCARD_CS_PIN))) {
+    while (1) {
+       Serial.println("Unable to access the SD card");
+      delay(500);
+    }
+  }
+  delay(1000);
 }
 
 void loop() {
+  if(playSdWav1.isPlaying() == false) {
+    Serial.println("Start playing");
+    playSdWav1.play("SABER.WAV");
+    delay(10); // wait for library to parse WAV info
+  }
   if(peak1.available()) {                                       // store peak values at each read
     peak1raw = peak1.read();
   }
